@@ -1,0 +1,158 @@
+const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const bcrypt = require('bcryptjs');
+require('dotenv').config();
+const config = process.env;
+const PORT = process.env.PORT || 5000;
+const app = express();
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nj7eiar.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+console.log(uri);
+
+const corsConfig = {
+  origin: [
+    'http://localhost:5173',
+    // 'http://localhost:5174',
+  ],
+  credentials: true,
+  optionSuccessStatus: 200,
+};
+
+app.use(cors(corsConfig));
+app.use(express.json());
+app.use(cookieParser());
+
+//verify token
+// const verifyToken = (req, res, next) => {
+//   const token = req.cookies?.token;
+//   console.log('39:', req.cookies);
+
+//   console.log('token console from 40', token);
+//   if (!token) return res.status(401).send({ message: 'Un Authorize' });
+//   if (token) {
+//     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+//       if (err) {
+//         return res.status(401).send({ message: 'Un Authorize' });
+//       }
+//       console.log('decode 47', decoded);
+//       req.user = decoded;
+//       next();
+//     });
+//   }
+// };
+
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+async function run() {
+  try {
+    //database collections are here
+    const database = client.db('sKash');
+    const userCollection = database.collection('users');
+    const appliedCollection = database.collection('applied');
+
+    app.post('/jwt', async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: '1d',
+      });
+      res
+        .cookie('token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+        })
+        .send({ success: true });
+    });
+    app.post('/logout', async (req, res) => {
+      const user = req.body;
+      console.log('logged out', user);
+      res.clearCookie('token', { maxAge: 0 }).send({ success: true });
+    });
+
+    //user registration
+    app.put('/user', async (req, res) => {
+      const user = req.body;
+      const query = { email: user?.email };
+      //check if user already have
+
+      const isExist = await userCollection.findOne(query);
+      if (isExist) {
+        return;
+      }
+      const option = { upsert: true };
+      const updateDoc = {
+        $set: {
+          ...user,
+          timestamp: Date.now(),
+        },
+      };
+      const result = await userCollection.updateOne(query, updateDoc, option);
+
+      res.send(result);
+    });
+
+    //pagination----------------------
+
+    //all jobs load
+    app.get('/allJobs', async (req, res) => {
+      const size = parseInt(req.query.size);
+      const page = parseInt(req.query.page);
+      const search = req.query.search;
+      let query = {
+        job_title: { $regex: search, $options: 'i' },
+      };
+      const result = await jobsCollection
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+      res.send(result);
+    });
+    app.get('/allJob', async (req, res) => {
+      const result = await jobsCollection.find().toArray();
+      res.send(result);
+    });
+
+    //for myjobs data load-----------------------------------
+
+    app.get('/myJobs/:email', async (req, res) => {
+      const tokenEmail = req.user.email;
+      const email = req.params.email;
+      if (tokenEmail !== email) {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+      const query = { owner_email: email };
+      console.log(query);
+      const result = await jobsCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    //Add job  data in database
+
+    app.post('/addJob', async (req, res) => {
+      const jobData = req.body;
+      const result = await jobsCollection.insertOne(jobData);
+      res.send(result);
+    });
+
+    //for delete job item
+  } finally {
+  }
+}
+run().catch(console.dir);
+
+// Connection
+
+app.get('/', (req, res) => {
+  res.send('YOUR server is live');
+});
+app.listen(PORT, () => {
+  console.log(`App running in port:  ${PORT}`);
+});
