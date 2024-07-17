@@ -57,6 +57,7 @@ async function run() {
     const database = client.db('sKash');
     const userCollection = database.collection('users');
     const transactionCollection = database.collection('transaction');
+    const requestCollection = database.collection('request');
 
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -99,7 +100,7 @@ async function run() {
     //   res.send(result);
     // });
     app.post('/register', async (req, res) => {
-      const { username, email, password, image_url, mobileNo } = req.body;
+      const { username, email, password, image_url, mobileNo, role } = req.body;
       try {
         const user = await userCollection.findOne({ email });
         if (user) {
@@ -114,7 +115,7 @@ async function run() {
           email,
           image_url,
           mobileNo,
-          role: 'user',
+          role,
           status: 'pending',
           timestamp: Date.now(),
           balance: 0,
@@ -154,6 +155,8 @@ async function run() {
 
     // user activity ===============================.......
 
+    //send Money=======>>>>>>>>>>>>>>>>>>>>>>
+
     app.post('/send-Money', async (req, res) => {
       const transactionData = req.body;
       const user = await userCollection.findOne({
@@ -185,12 +188,19 @@ async function run() {
       const sUpdateBalance = parseInt(
         sender.balance - transactionData.totalAmount
       );
-      console.log(transactionData?.totalAmount, updateBalance);
+      // console.log(transactionData?.totalAmount, updateBalance);
       const senderUpdateBalance = {
         $set: { balance: sUpdateBalance },
       };
       const updateData = {
-        $set: { balance: updateBalance },
+        $set: {
+          balance: updateBalance,
+          receiverEmail: user.email,
+        },
+      };
+      const transData = {
+        ...transactionData,
+        receiverEmail: user.email,
       };
       const id = transactionData._id;
       const query = { mobileNo: transactionData.mobileNo };
@@ -199,7 +209,83 @@ async function run() {
         { email: transactionData.senderEmail },
         senderUpdateBalance
       );
-      const result = await transactionCollection.insertOne(transactionData);
+      const result = await transactionCollection.insertOne(transData);
+      res.send(result);
+    });
+
+    //Cash out ==============>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+    app.post('/cash-out', async (req, res) => {
+      const transactionData = req.body;
+      const user = await userCollection.findOne({
+        mobileNo: transactionData.mobileNo,
+      });
+      const sender = await userCollection.findOne({
+        email: transactionData.senderEmail,
+      });
+      if (user.role !== 'Agent') {
+        return res.send({ success: false, message: 'Receiver is not a Agent' });
+      }
+
+      // console.log(sender);
+      if (!user) {
+        return res.send({ success: false, message: 'Invalid credentials' });
+      }
+
+      const isMatch = await bcrypt.compare(
+        transactionData.password,
+        sender.password
+      );
+
+      if (!isMatch) {
+        return res.send({ success: false, message: 'Invalid credentials' });
+      }
+      const transData = {
+        ...transactionData,
+        receiverEmail: user.email,
+      };
+      const result = await requestCollection.insertOne(transData);
+      res.send(result);
+    });
+
+    //cash -in
+
+    app.post('/cash-in', async (req, res) => {
+      const transactionData = req.body;
+      const user = await userCollection.findOne({
+        mobileNo: transactionData.mobileNo,
+      });
+      const sender = await userCollection.findOne({
+        email: transactionData.senderEmail,
+      });
+      if (user.role !== 'Agent') {
+        return res.send({
+          success: false,
+          message: 'Receiver is not a Agent',
+        });
+      }
+
+      // console.log(sender);
+      if (!user) {
+        return res.send({ success: false, message: 'Invalid credentials' });
+      }
+
+      const transData = {
+        ...transactionData,
+        receiverEmail: user.email,
+      };
+      const result = await requestCollection.insertOne(transData);
+      res.send(result);
+    });
+
+    //agent transaction-management=======>>>>>>>>>>>>>>>>>
+    app.get('/transaction-management/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = {
+        receiverEmail: email,
+      };
+      // console.log(query);
+      const result = await requestCollection.find(query).toArray();
       res.send(result);
     });
 
@@ -209,8 +295,8 @@ async function run() {
       const email = req.params.email;
 
       const query = { email: email };
-      console.log(query);
-      const result = await userCollection.find(query).toArray();
+      // console.log(query);
+      const result = await userCollection.findOne(query);
       res.send(result);
     });
 
