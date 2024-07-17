@@ -162,8 +162,11 @@ async function run() {
       const sender = await userCollection.findOne({
         email: transactionData.senderEmail,
       });
+      if (user.role !== 'user') {
+        return res.send({ success: false, message: 'Receiver is not a User' });
+      }
 
-      console.log(sender);
+      // console.log(sender);
       if (!user) {
         return res.send({ success: false, message: 'Invalid credentials' });
       }
@@ -197,6 +200,17 @@ async function run() {
         senderUpdateBalance
       );
       const result = await transactionCollection.insertOne(transactionData);
+      res.send(result);
+    });
+
+    //balance inquiry ==================>>>>>>>>>>>>>
+
+    app.get('/user-balance/:email', async (req, res) => {
+      const email = req.params.email;
+
+      const query = { email: email };
+      console.log(query);
+      const result = await userCollection.find(query).toArray();
       res.send(result);
     });
 
