@@ -8,6 +8,7 @@ require('dotenv').config();
 const config = process.env;
 const PORT = process.env.PORT || 5000;
 const app = express();
+const JWT_SECRET = process.env.ACCESS_TOKEN_SECRET || 'your_jwt_secret';
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nj7eiar.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 console.log(uri);
 
@@ -24,24 +25,24 @@ app.use(cors(corsConfig));
 app.use(express.json());
 app.use(cookieParser());
 
-//verify token
-// const verifyToken = (req, res, next) => {
-//   const token = req.cookies?.token;
-//   console.log('39:', req.cookies);
+// verify token
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  console.log('39:', req.cookies);
 
-//   console.log('token console from 40', token);
-//   if (!token) return res.status(401).send({ message: 'Un Authorize' });
-//   if (token) {
-//     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-//       if (err) {
-//         return res.status(401).send({ message: 'Un Authorize' });
-//       }
-//       console.log('decode 47', decoded);
-//       req.user = decoded;
-//       next();
-//     });
-//   }
-// };
+  console.log('token console from 40', token);
+  if (!token) return res.status(401).send({ message: 'Un Authorize' });
+  if (token) {
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+      if (err) {
+        return res.status(401).send({ message: 'Un Authorize' });
+      }
+      console.log('decode 47', decoded);
+      req.user = decoded;
+      next();
+    });
+  }
+};
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -77,25 +78,78 @@ async function run() {
     });
 
     //user registration
-    app.put('/user', async (req, res) => {
-      const user = req.body;
-      const query = { email: user?.email };
-      //check if user already have
+    // app.post('/register', async (req, res) => {
+    //   const user = req.body;
+    //   const query = { email: user?.email };
+    //   //check if user already have
 
-      const isExist = await userCollection.findOne(query);
-      if (isExist) {
-        return;
-      }
-      const option = { upsert: true };
-      const updateDoc = {
-        $set: {
-          ...user,
+    //   const isExist = await userCollection.findOne(query);
+    //   if (isExist) {
+    //     return;
+    //   }
+    //   const option = { upsert: true };
+    //   const updateDoc = {
+    //     $set: {
+    //       ...user,
+    //       timestamp: Date.now(),
+    //     },
+    //   };
+    //   const result = await userCollection.updateOne(query, updateDoc, option);
+
+    //   res.send(result);
+    // });
+    app.post('/register', async (req, res) => {
+      const { username, email, password, image_url, mobileNo } = req.body;
+      try {
+        const user = await userCollection.findOne({ email });
+        if (user) {
+          return res.status(400).json({ message: 'User already exists' });
+        }
+        console.log('login');
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await userCollection.insertOne({
+          username,
+          password: hashedPassword,
+          email,
+          image_url,
+          mobileNo,
+          role: 'user',
+          status: 'pending',
           timestamp: Date.now(),
-        },
-      };
-      const result = await userCollection.updateOne(query, updateDoc, option);
+          balance: 0,
+        });
 
-      res.send(result);
+        res
+          .status(201)
+          .json({ success: true, message: 'User registered successfully' });
+      } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+      }
+    });
+
+    //login user
+    app.post('/login', async (req, res) => {
+      const { email, password } = req.body;
+      try {
+        const user = await userCollection.findOne({ email });
+        if (!user) {
+          return res.send({ success: false, message: 'Invalid credentials' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        console.log(isMatch);
+
+        if (!isMatch) {
+          return res.send({ success: false, message: 'Invalid credentials' });
+        }
+
+        const { password: pass, ...rest } = user;
+        const token = jwt.sign({ ...rest }, JWT_SECRET, { expiresIn: '1h' });
+        res.send({ token, success: true, message: 'Successfully Logged In' });
+      } catch (error) {
+        res.send({ message: 'Internal server error' });
+      }
     });
 
     //pagination----------------------
