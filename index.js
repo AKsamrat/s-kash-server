@@ -56,7 +56,7 @@ async function run() {
     //database collections are here
     const database = client.db('sKash');
     const userCollection = database.collection('users');
-    const appliedCollection = database.collection('applied');
+    const transactionCollection = database.collection('transaction');
 
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -150,6 +150,54 @@ async function run() {
       } catch (error) {
         res.send({ message: 'Internal server error' });
       }
+    });
+
+    // user activity ===============================.......
+
+    app.post('/send-Money', async (req, res) => {
+      const transactionData = req.body;
+      const user = await userCollection.findOne({
+        mobileNo: transactionData.mobileNo,
+      });
+      const sender = await userCollection.findOne({
+        email: transactionData.senderEmail,
+      });
+
+      console.log(sender);
+      if (!user) {
+        return res.send({ success: false, message: 'Invalid credentials' });
+      }
+
+      const isMatch = await bcrypt.compare(
+        transactionData.password,
+        sender.password
+      );
+
+      if (!isMatch) {
+        return res.send({ success: false, message: 'Invalid credentials' });
+      }
+      const updateBalance = parseInt(
+        user.balance + transactionData.totalAmount
+      );
+      const sUpdateBalance = parseInt(
+        sender.balance - transactionData.totalAmount
+      );
+      console.log(transactionData?.totalAmount, updateBalance);
+      const senderUpdateBalance = {
+        $set: { balance: sUpdateBalance },
+      };
+      const updateData = {
+        $set: { balance: updateBalance },
+      };
+      const id = transactionData._id;
+      const query = { mobileNo: transactionData.mobileNo };
+      const countPlus = await userCollection.updateOne(query, updateData);
+      const senderBalance = await userCollection.updateOne(
+        { email: transactionData.senderEmail },
+        senderUpdateBalance
+      );
+      const result = await transactionCollection.insertOne(transactionData);
+      res.send(result);
     });
 
     //pagination----------------------
