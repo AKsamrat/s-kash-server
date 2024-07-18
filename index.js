@@ -165,7 +165,7 @@ async function run() {
       const sender = await userCollection.findOne({
         email: transactionData.senderEmail,
       });
-      if (user.role !== 'user') {
+      if (user.role !== 'User') {
         return res.send({ success: false, message: 'Receiver is not a User' });
       }
 
@@ -201,6 +201,7 @@ async function run() {
       const transData = {
         ...transactionData,
         receiverEmail: user.email,
+        type: 'Send Money',
       };
       const id = transactionData._id;
       const query = { mobileNo: transactionData.mobileNo };
@@ -368,6 +369,35 @@ async function run() {
         );
         const result = await transactionCollection.insertOne(reqData);
         res.send(result);
+      }
+    });
+
+    //agent transaction-management=======>>>>>>>>>>>>>>>>>
+    app.get('/transaction-history/:email', async (req, res) => {
+      const email = req.params.email;
+      const userData = await userCollection.findOne({ email });
+      const query1 = {
+        senderEmail: email,
+      };
+
+      if (userData.role === 'Agent') {
+        const query = {
+          receiverEmail: email,
+        };
+        // console.log(query);
+        const result = await transactionCollection.find(query).toArray();
+        res.send(result);
+      } else {
+        const query1 = {
+          senderEmail: email,
+        };
+        const query2 = {
+          receiverEmail: email,
+        };
+
+        const result1 = await transactionCollection.find(query1).toArray();
+        const result2 = await transactionCollection.find(query2).toArray();
+        res.send([...result1, [result2]]);
       }
     });
 
