@@ -204,7 +204,7 @@ async function run() {
       };
       const id = transactionData._id;
       const query = { mobileNo: transactionData.mobileNo };
-      const countPlus = await userCollection.updateOne(query, updateData);
+      const receiverBalance = await userCollection.updateOne(query, updateData);
       const senderBalance = await userCollection.updateOne(
         { email: transactionData.senderEmail },
         senderUpdateBalance
@@ -287,6 +287,88 @@ async function run() {
       // console.log(query);
       const result = await requestCollection.find(query).toArray();
       res.send(result);
+    });
+
+    //reject request from agent ==================>>>>>>>>>>>>>
+    app.delete('/reject-request/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await requestCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    //approve request of cash in and cash out
+
+    app.patch('/approve-request/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const reqData = await requestCollection.findOne(query);
+      const senderData = await userCollection.findOne({
+        email: reqData.senderEmail,
+      });
+      const receiverData = await userCollection.findOne({
+        email: reqData.receiverEmail,
+      });
+      console.log(senderData, receiverData);
+
+      //checking request type
+
+      if (reqData.type === 'Cash Out') {
+        const rUpdateBalance = parseInt(
+          receiverData.balance + reqData.totalAmount
+        );
+        const sUpdateBalance = parseInt(
+          senderData.balance - reqData.totalAmount
+        );
+        // console.log(transactionData?.totalAmount, updateBalance);
+        const senderUpdateBalance = {
+          $set: { balance: sUpdateBalance },
+        };
+        const updateData = {
+          $set: {
+            balance: rUpdateBalance,
+          },
+        };
+        const query = { email: reqData.receiverEmail };
+        const receiverBalance = await userCollection.updateOne(
+          query,
+          updateData
+        );
+        const senderBalance = await userCollection.updateOne(
+          { email: reqData.senderEmail },
+          senderUpdateBalance
+        );
+        const result = await transactionCollection.insertOne(reqData);
+        res.send(result);
+      } else {
+        const rUpdateBalance = parseInt(
+          receiverData.balance - reqData.totalAmount
+        );
+        const sUpdateBalance = parseInt(
+          senderData.balance + reqData.totalAmount
+        );
+        // console.log(transactionData?.totalAmount, updateBalance);
+        const senderUpdateBalance = {
+          $set: { balance: sUpdateBalance },
+        };
+        const updateData = {
+          $set: {
+            balance: rUpdateBalance,
+          },
+        };
+        const query = { email: reqData.receiverEmail };
+        const receiverBalance = await userCollection.updateOne(
+          query,
+          updateData
+        );
+        const senderBalance = await userCollection.updateOne(
+          { email: reqData.senderEmail },
+          senderUpdateBalance
+        );
+        const result = await transactionCollection.insertOne(reqData);
+        res.send(result);
+      }
     });
 
     //balance inquiry ==================>>>>>>>>>>>>>
