@@ -27,17 +27,18 @@ app.use(cookieParser());
 
 // verify token
 const verifyToken = (req, res, next) => {
-  const token = req.cookies?.token;
-  console.log('39:', req.cookies);
+  const token =
+    req.headers.authorization && req.headers.authorization.split(' ')[1];
+  // console.log('39:', req.cookies);
 
-  console.log('token console from 40', token);
+  // console.log('token console from 34', token);
   if (!token) return res.status(401).send({ message: 'Un Authorize' });
   if (token) {
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
       if (err) {
         return res.status(401).send({ message: 'Un Authorize' });
       }
-      console.log('decode 47', decoded);
+      // console.log('decode 47', decoded);
       req.user = decoded;
       next();
     });
@@ -58,25 +59,6 @@ async function run() {
     const userCollection = database.collection('users');
     const transactionCollection = database.collection('transaction');
     const requestCollection = database.collection('request');
-
-    app.post('/jwt', async (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn: '1d',
-      });
-      res
-        .cookie('token', token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-        })
-        .send({ success: true });
-    });
-    app.post('/logout', async (req, res) => {
-      const user = req.body;
-      console.log('logged out', user);
-      res.clearCookie('token', { maxAge: 0 }).send({ success: true });
-    });
 
     //user registration
     // app.post('/register', async (req, res) => {
@@ -280,7 +262,7 @@ async function run() {
     });
 
     //agent transaction-management=======>>>>>>>>>>>>>>>>>
-    app.get('/transaction-management/:email', async (req, res) => {
+    app.get('/transaction-management/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
       const query = {
         receiverEmail: email,
@@ -311,7 +293,7 @@ async function run() {
       const receiverData = await userCollection.findOne({
         email: reqData.receiverEmail,
       });
-      console.log(senderData, receiverData);
+      // console.log(senderData, receiverData);
 
       //checking request type
 
@@ -373,7 +355,7 @@ async function run() {
     });
 
     //agent transaction-management=======>>>>>>>>>>>>>>>>>
-    app.get('/transaction-history/:email', async (req, res) => {
+    app.get('/transaction-history/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
       const userData = await userCollection.findOne({ email });
       const query1 = {
@@ -397,11 +379,76 @@ async function run() {
 
         const result1 = await transactionCollection.find(query1).toArray();
         const result2 = await transactionCollection.find(query2).toArray();
-        res.send([...result1, [result2]]);
+        res.send([...result1, ...result2]);
       }
     });
 
-    //balance inquiry ==================>>>>>>>>>>>>>
+    //admin functionality-------------------------------------------
+    //system-monitoring ============>>>>>>>>>>>>>>>>
+
+    app.get('/system-monitoring', verifyToken, async (req, res) => {
+      // console.log(query);
+      const result = await transactionCollection.find().toArray();
+      res.send(result);
+    });
+
+    //user-management========================>>>>>>>>>>>>>>>>>>>>
+
+    app.get('/user-management', async (req, res) => {
+      const search = req.query.search;
+      console.log(search);
+      let query = {
+        username: { $regex: search, $options: 'i' },
+      };
+
+      const result = await userCollection.find(query).toArray();
+
+      res.send(result);
+    });
+
+    // reject-user ====================>>>>>>>>>>>>>>>>>>
+    app.patch('/reject-user/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const updateData = {
+        $set: {
+          status: 'Block',
+        },
+      };
+      const result = await userCollection.updateOne(query, updateData);
+      res.send(result);
+    });
+    // reject-user ====================>>>>>>>>>>>>>>>>>>
+    app.patch('/approve-user/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const userData = await userCollection.findOne(query);
+      if (userData.role === 'User') {
+        const sUpdateBalance = parseInt(userData.balance + 40);
+        // console.log(transactionData?.totalAmount, updateBalance);
+        const userUpdateBalance = {
+          $set: { balance: sUpdateBalance },
+        };
+        const user = await userCollection.updateOne(query, userUpdateBalance);
+      } else {
+        const sUpdateBalance = parseInt(userData.balance + 10000);
+        // console.log(transactionData?.totalAmount, updateBalance);
+        const userUpdateBalance = {
+          $set: { balance: sUpdateBalance },
+        };
+        const user = await userCollection.updateOne(query, userUpdateBalance);
+      }
+      const updateData = {
+        $set: {
+          status: 'Active',
+        },
+      };
+      const result = await userCollection.updateOne(query, updateData);
+      res.send(result);
+    });
+
+    //User balance inquiry ==================>>>>>>>>>>>>>
 
     app.get('/user-balance/:email', async (req, res) => {
       const email = req.params.email;
