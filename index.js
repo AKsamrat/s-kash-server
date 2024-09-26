@@ -15,6 +15,7 @@ console.log(uri);
 const corsConfig = {
   origin: [
     'http://localhost:5173',
+    'https://s-kash-client.vercel.app',
     // 'http://localhost:5174',
   ],
   credentials: true,
@@ -32,11 +33,11 @@ const verifyToken = (req, res, next) => {
   // console.log('39:', req.cookies);
 
   // console.log('token console from 34', token);
-  if (!token) return res.status(401).send({ message: 'Un Authorize' });
+  if (!token) return res.status(401).send({ message: 't Un Authorize' });
   if (token) {
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
       if (err) {
-        return res.status(401).send({ message: 'Un Authorize' });
+        return res.status(401).send({ message: 'Un Authorize  t ' });
       }
       // console.log('decode 47', decoded);
       req.user = decoded;
@@ -131,7 +132,7 @@ async function run() {
         const token = jwt.sign({ ...rest }, JWT_SECRET, { expiresIn: '1h' });
         res.send({ token, success: true, message: 'Successfully Logged In' });
       } catch (error) {
-        res.send({ message: 'Internal server error' });
+        res.send({ message: 'Internal server error when login' });
       }
     });
 
@@ -456,50 +457,6 @@ async function run() {
       const query = { email: email };
       // console.log(query);
       const result = await userCollection.findOne(query);
-      res.send(result);
-    });
-
-    //pagination----------------------
-
-    //all jobs load
-    app.get('/allJobs', async (req, res) => {
-      const size = parseInt(req.query.size);
-      const page = parseInt(req.query.page);
-      const search = req.query.search;
-      let query = {
-        job_title: { $regex: search, $options: 'i' },
-      };
-      const result = await jobsCollection
-        .find(query)
-        .skip(page * size)
-        .limit(size)
-        .toArray();
-      res.send(result);
-    });
-    app.get('/allJob', async (req, res) => {
-      const result = await jobsCollection.find().toArray();
-      res.send(result);
-    });
-
-    //for myjobs data load-----------------------------------
-
-    app.get('/myJobs/:email', async (req, res) => {
-      const tokenEmail = req.user.email;
-      const email = req.params.email;
-      if (tokenEmail !== email) {
-        return res.status(403).send({ message: 'forbidden access' });
-      }
-      const query = { owner_email: email };
-      console.log(query);
-      const result = await jobsCollection.find(query).toArray();
-      res.send(result);
-    });
-
-    //Add job  data in database
-
-    app.post('/addJob', async (req, res) => {
-      const jobData = req.body;
-      const result = await jobsCollection.insertOne(jobData);
       res.send(result);
     });
 
